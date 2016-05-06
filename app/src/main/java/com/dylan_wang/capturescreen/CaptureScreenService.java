@@ -1,6 +1,5 @@
 package com.dylan_wang.capturescreen;
 
-import android.annotation.TargetApi;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
@@ -13,7 +12,6 @@ import android.media.ImageReader;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
@@ -37,7 +35,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 
-public class Service1 extends Service
+public class CaptureScreenService extends Service
 {
     private LinearLayout mFloatLayout = null;
     private WindowManager.LayoutParams wmParams = null;
@@ -169,7 +167,6 @@ public class Service1 extends Service
         Log.i(TAG, "prepared the virtual environment");
     }
 
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void startVirtual(){
         if (mMediaProjection != null) {
             Log.i(TAG, "want to display virtual");
@@ -182,16 +179,14 @@ public class Service1 extends Service
         }
     }
 
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void setUpMediaProjection(){
-        mResultData = ((ShotApplication)getApplication()).getIntent();
-        mResultCode = ((ShotApplication)getApplication()).getResult();
-        mMediaProjectionManager1 = ((ShotApplication)getApplication()).getMediaProjectionManager();
+        mResultData = ((CaptureScreenApplication)getApplication()).getIntent();
+        mResultCode = ((CaptureScreenApplication)getApplication()).getResult();
+        mMediaProjectionManager1 = ((CaptureScreenApplication)getApplication()).getMediaProjectionManager();
         mMediaProjection = mMediaProjectionManager1.getMediaProjection(mResultCode, mResultData);
         Log.i(TAG, "mMediaProjection defined");
     }
 
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     private void virtualDisplay(){
         mVirtualDisplay = mMediaProjection.createVirtualDisplay("screen-mirror",
                 windowWidth, windowHeight, mScreenDensity, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
@@ -199,7 +194,6 @@ public class Service1 extends Service
         Log.i(TAG, "virtual displayed");
     }
 
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     private void startCapture(){
         strDate = dateFormat.format(new java.util.Date());
         nameImage = pathImage+strDate+".png";
@@ -244,7 +238,6 @@ public class Service1 extends Service
         }
     }
 
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     private void tearDownMediaProjection() {
         if (mMediaProjection != null) {
             mMediaProjection.stop();

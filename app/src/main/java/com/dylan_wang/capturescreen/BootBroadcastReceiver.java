@@ -12,7 +12,7 @@ public class BootBroadcastReceiver extends BroadcastReceiver {
     public void onReceive(Context context, Intent intent) {
 
         if (intent.getAction().equals(ACTION)) {
-            Intent intent1 = new Intent(context, com.dylan_wang.capturescreen.Service1.class);
+            Intent intent1 = new Intent(context, CaptureScreenService.class);
             intent1.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startService(intent1);
         }
