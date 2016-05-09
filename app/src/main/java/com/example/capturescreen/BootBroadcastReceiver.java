@@ -1,4 +1,4 @@
-package com.dylan_wang.capturescreen;
+package com.example.capturescreen;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
