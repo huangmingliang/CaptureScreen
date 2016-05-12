@@ -14,7 +14,9 @@ import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Message;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Gravity;
@@ -33,10 +35,10 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.text.Format;
 import java.text.SimpleDateFormat;
 
-public class CaptureScreenService extends Service
-{
+public class CaptureScreenService extends Service implements ImageReader.OnImageAvailableListener {
     private LinearLayout mFloatLayout = null;
     private WindowManager.LayoutParams wmParams = null;
     private WindowManager mWindowManager = null;
@@ -55,7 +57,7 @@ public class CaptureScreenService extends Service
 
     public static int mResultCode = 0;
     public static Intent mResultData = null;
-    public static MediaProjectionManager mMediaProjectionManager1 = null;
+    public static MediaProjectionManager mMediaProjectionManager = null;
 
     private WindowManager mWindowManager1 = null;
     private int windowWidth = 0;
@@ -63,10 +65,10 @@ public class CaptureScreenService extends Service
     private ImageReader mImageReader = null;
     private DisplayMetrics metrics = null;
     private int mScreenDensity = 0;
+    private Handler handler = new Handler();
 
     @Override
-    public void onCreate()
-    {
+    public void onCreate() {
         // TODO Auto-generated method stub
         super.onCreate();
 
@@ -76,16 +78,14 @@ public class CaptureScreenService extends Service
     }
 
     @Override
-    public IBinder onBind(Intent intent)
-    {
+    public IBinder onBind(Intent intent) {
         // TODO Auto-generated method stub
         return null;
     }
 
-    private void createFloatView()
-    {
+    private void createFloatView() {
         wmParams = new WindowManager.LayoutParams();
-        mWindowManager = (WindowManager)getApplication().getSystemService(getApplication().WINDOW_SERVICE);
+        mWindowManager = (WindowManager) getApplication().getSystemService(getApplication().WINDOW_SERVICE);
         wmParams.type = LayoutParams.TYPE_PHONE;
         wmParams.format = PixelFormat.RGBA_8888;
         wmParams.flags = LayoutParams.FLAG_NOT_FOCUSABLE;
@@ -97,7 +97,7 @@ public class CaptureScreenService extends Service
         inflater = LayoutInflater.from(getApplication());
         mFloatLayout = (LinearLayout) inflater.inflate(R.layout.float_layout, null);
         mWindowManager.addView(mFloatLayout, wmParams);
-        mFloatView = (ImageButton)mFloatLayout.findViewById(R.id.float_id);
+        mFloatView = (ImageButton) mFloatLayout.findViewById(R.id.float_id);
 
         mFloatLayout.measure(View.MeasureSpec.makeMeasureSpec(0,
                 View.MeasureSpec.UNSPECIFIED), View.MeasureSpec
@@ -120,85 +120,111 @@ public class CaptureScreenService extends Service
             public void onClick(View v) {
                 // hide the button
                 mFloatView.setVisibility(View.INVISIBLE);
-
-                Handler handler1 = new Handler();
-                handler1.postDelayed(new Runnable() {
+                Handler handler = new Handler();
+                handler.post(new Runnable() {
+                    @Override
                     public void run() {
-                        //start virtual
+                        Log.e(TAG, "Thread name:" + Thread.currentThread().getName());
                         startVirtual();
                     }
-                }, 500);
-
-                Handler handler2 = new Handler();
-                handler2.postDelayed(new Runnable() {
-                    public void run() {
-                        //capture the screen
-                        startCapture();
-                    }
-                }, 1500);
-
-                Handler handler3 = new Handler();
-                handler3.postDelayed(new Runnable() {
-                    public void run() {
-                        mFloatView.setVisibility(View.VISIBLE);
-                        //stopVirtual();
-                    }
-                }, 1000);
+                });
             }
         });
 
-        Log.i(TAG, "created the float sphere view");
+        Log.e(TAG, "created the float sphere view");
     }
 
-    private void createVirtualEnvironment(){
+    private void createVirtualEnvironment() {
+        Log.e(TAG, "Ready to prepared the virtual environment");
         dateFormat = new SimpleDateFormat("yyyy_MM_dd_hh_mm_ss");
         strDate = dateFormat.format(new java.util.Date());
-        pathImage = Environment.getExternalStorageDirectory().getPath()+"/Pictures/";
-        nameImage = pathImage+strDate+".png";
-        mMediaProjectionManager1 = (MediaProjectionManager)getApplication().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-        mWindowManager1 = (WindowManager)getApplication().getSystemService(Context.WINDOW_SERVICE);
+        pathImage = Environment.getExternalStorageDirectory().getPath() + "/Pictures/";
+        nameImage = pathImage + strDate + ".png";
+        mMediaProjectionManager = (MediaProjectionManager) getApplication().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+        mWindowManager1 = (WindowManager) getApplication().getSystemService(Context.WINDOW_SERVICE);
         windowWidth = mWindowManager1.getDefaultDisplay().getWidth();
         windowHeight = mWindowManager1.getDefaultDisplay().getHeight();
         metrics = new DisplayMetrics();
         mWindowManager1.getDefaultDisplay().getMetrics(metrics);
         mScreenDensity = metrics.densityDpi;
-        mImageReader = ImageReader.newInstance(windowWidth, windowHeight, 0x1, 2); //ImageFormat.RGB_565
-
-        Log.i(TAG, "prepared the virtual environment");
+        Log.e(TAG, "Finish to prepared the virtual environment");
     }
 
-    public void startVirtual(){
+    public void startVirtual() {
+        mImageReader = ImageReader.newInstance(windowWidth, windowHeight, 1, 2);
+        mImageReader.setOnImageAvailableListener(this, null);
         if (mMediaProjection != null) {
-            Log.i(TAG, "want to display virtual");
-            virtualDisplay();
+            createVirtualDisplay();
         } else {
-            Log.i(TAG, "start screen capture intent");
-            Log.i(TAG, "want to build mediaprojection and display virtual");
-            setUpMediaProjection();
-            virtualDisplay();
+            Log.e(TAG, "MediaProjection instance is null");
+            createMediaProjectionInstance();
+            createVirtualDisplay();
         }
     }
 
-    public void setUpMediaProjection(){
-        mResultData = ((CaptureScreenApplication)getApplication()).getIntent();
-        mResultCode = ((CaptureScreenApplication)getApplication()).getResult();
-        mMediaProjectionManager1 = ((CaptureScreenApplication)getApplication()).getMediaProjectionManager();
-        mMediaProjection = mMediaProjectionManager1.getMediaProjection(mResultCode, mResultData);
-        Log.i(TAG, "mMediaProjection defined");
+    public void createMediaProjectionInstance() {
+        Log.e(TAG, "Ready to create MediaProjection instance");
+        mResultData = ((CaptureScreenApplication) getApplication()).getIntent();
+        mResultCode = ((CaptureScreenApplication) getApplication()).getResult();
+        mMediaProjectionManager = ((CaptureScreenApplication) getApplication()).getMediaProjectionManager();
+        mMediaProjection = mMediaProjectionManager.getMediaProjection(mResultCode, mResultData);
+        Log.e(TAG, "Finish to create MediaProjection instance is:" + mMediaProjection);
     }
 
-    private void virtualDisplay(){
-        mVirtualDisplay = mMediaProjection.createVirtualDisplay("screen-mirror",
+    private void createVirtualDisplay() {
+        Log.e(TAG, "Ready to createVirtualDisplay");
+        mVirtualDisplay = mMediaProjection.createVirtualDisplay("screencap",
                 windowWidth, windowHeight, mScreenDensity, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                mImageReader.getSurface(), null, null);
-        Log.i(TAG, "virtual displayed");
+                mImageReader.getSurface(), new VirtualDisplay.Callback() {
+                    @Override
+                    public void onPaused() {
+                        super.onPaused();
+                        Log.e(TAG, "VirtualDisplay.Callback->onPaused");
+                    }
+
+                    @Override
+                    public void onResumed() {
+                        super.onResumed();
+                        Log.e(TAG, "VirtualDisplay.Callback->onResumed");
+                    }
+
+                    @Override
+                    public void onStopped() {
+                        super.onStopped();
+                        Log.e(TAG, "VirtualDisplay.Callback->onStopped");
+                    }
+                }, handler);
+        Log.e(TAG, "Finish to createVirtualDisplay");
     }
 
-    private void startCapture(){
+    private void startCapture(ImageReader reader) {
+        Bitmap bitmap = null;
+        Image image = null;
         strDate = dateFormat.format(new java.util.Date());
-        nameImage = pathImage+strDate+".png";
+        nameImage = pathImage + strDate + ".png";
+        image = reader.acquireLatestImage();
+        bitmap = createBitmapFromImage(image);
+        createFileFromBitmap(bitmap, nameImage);
+    }
 
-        Image image = mImageReader.acquireLatestImage();
+    private void tearDownMediaProjection(ImageReader reader) {
+        if (reader != null) {
+            reader.close();
+            reader = null;
+        }
+        if (mMediaProjection != null) {
+            mMediaProjection.stop();
+            mMediaProjection = null;
+        }
+        Log.e(TAG, "reader closed");
+        Log.e(TAG, "mMediaProjection is stop");
+    }
+
+    private Bitmap createBitmapFromImage(Image image) {
+        if (image == null) {
+            Log.e(TAG, "image is null");
+            return null;
+        }
         int width = image.getWidth();
         int height = image.getHeight();
         final Image.Plane[] planes = image.getPlanes();
@@ -206,21 +232,26 @@ public class CaptureScreenService extends Service
         int pixelStride = planes[0].getPixelStride();
         int rowStride = planes[0].getRowStride();
         int rowPadding = rowStride - pixelStride * width;
-        Bitmap bitmap = Bitmap.createBitmap(width+rowPadding/pixelStride, height, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(width + rowPadding / pixelStride, height, Bitmap.Config.ARGB_8888);
         bitmap.copyPixelsFromBuffer(buffer);
-        bitmap = Bitmap.createBitmap(bitmap, 0, 0,width, height);
+        bitmap = Bitmap.createBitmap(bitmap, 0, 0, width, height);
         image.close();
-        Log.i(TAG, "image data captured");
+        Log.e(TAG, "image data captured");
+        return bitmap;
+    }
 
-        if(bitmap != null) {
-            try{
-                File fileImage = new File(nameImage);
-                if(!fileImage.exists()){
+    private void createFileFromBitmap(Bitmap bitmap, String desFilePath) {
+        if (bitmap == null) {
+            return;
+        } else {
+            try {
+                File fileImage = new File(desFilePath);
+                if (!fileImage.exists()) {
                     fileImage.createNewFile();
-                    Log.i(TAG, "image file created");
+                    Log.e(TAG, "image file created");
                 }
                 FileOutputStream out = new FileOutputStream(fileImage);
-                if(out != null){
+                if (out != null) {
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
                     out.flush();
                     out.close();
@@ -228,43 +259,42 @@ public class CaptureScreenService extends Service
                     Uri contentUri = Uri.fromFile(fileImage);
                     media.setData(contentUri);
                     this.sendBroadcast(media);
-                    Log.i(TAG, "screen image saved");
+                    Log.e(TAG, "screen image saved");
                 }
-            }catch(FileNotFoundException e) {
+            } catch (FileNotFoundException e) {
                 e.printStackTrace();
-            }catch (IOException e){
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
 
-    private void tearDownMediaProjection() {
-        if (mMediaProjection != null) {
-            mMediaProjection.stop();
-            mMediaProjection = null;
-        }
-        Log.i(TAG,"mMediaProjection undefined");
-    }
-
-    private void stopVirtual() {
+    private void releaseVirtualDisplay() {
         if (mVirtualDisplay == null) {
             return;
         }
         mVirtualDisplay.release();
         mVirtualDisplay = null;
-        Log.i(TAG,"virtual display stopped");
+        Log.e(TAG, "virtual display stopped");
     }
 
     @Override
-    public void onDestroy()
-    {
+    public void onDestroy() {
         // to remove mFloatLayout from windowManager
         super.onDestroy();
-        if(mFloatLayout != null)
-        {
+        if (mFloatLayout != null) {
             mWindowManager.removeView(mFloatLayout);
         }
-        tearDownMediaProjection();
-        Log.i(TAG, "application destroy");
+        tearDownMediaProjection(mImageReader);
+        Log.e(TAG, "application destroy");
+    }
+
+    @Override
+    public void onImageAvailable(ImageReader reader) {
+        Log.e(TAG, "MaxImages:" + reader.getMaxImages());
+        startCapture(reader);
+        tearDownMediaProjection(reader);
+        mFloatView.setVisibility(View.VISIBLE);
+
     }
 }
